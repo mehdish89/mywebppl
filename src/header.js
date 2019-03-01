@@ -102,6 +102,7 @@ module.exports = function(env) {
     if (typeof _score !== 'number' || isNaN(_score)) {
       throw new Error('The score argument is not a number.');
     }
+    // console.log(_score)
     return env.coroutine.factor(s, k, a, score);
   };
 
