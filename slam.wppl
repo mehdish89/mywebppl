@@ -1,0 +1,495 @@
+// var obs = [[{"range":5.094256427886906,"bearing":1.555631926412632,"id":0},
+//             {"range":2.3746692920403496,"bearing":0.5136801572044718,"id":8},
+//             {"range":3.304426512866045,"bearing":0.38752298432105625,"id":9}],
+//            [{"range":5.013855044391432,"bearing":1.4394905245183853,"id":0},
+//             {"range":1.8040203693978596,"bearing":-0.3652944357308737,"id":5},
+//             {"range":2.537541361159462,"bearing":0.5770053847099317,"id":9}],
+//            [{"range":5.360645155660669,"bearing":1.329312566612322,"id":0},
+//             {"range":2.897446295802523,"bearing":-0.14205653407517935,"id":5},
+//             {"range":1.9303215365214648,"bearing":-0.38031067519961403,"id":6}],
+//            [{"range":5.757745302248238,"bearing":1.1075879687467038,"id":0},
+//             {"range":3.9790932288646332,"bearing":-0.2774129533134114,"id":5},
+//             {"range":3.2260504147311506,"bearing":-0.24233106057699305,"id":6},
+//             {"range":2.2357189289795873,"bearing":-0.5426609257734605,"id":7}]]
+
+/////////////////////////////// 
+//
+// MODEL IS DEFINED BELOW
+//
+///////////////////////////////
+
+
+// var t_noise = {xy: 0.1, th: 0.3}
+// var o_noise = {range: 0.1, bearing: 0.05}
+
+var t_noise = {xy: 0.1, th: 0.3}
+var o_noise = {range: 0.1, bearing: 0.05}
+
+
+// "t_noise":{"xy":0.10356501642950744,"th":0.24363926088622168},"o_noise":{"range":0.14355087299220015,"bearing":0.023767843403918798}
+// "t_noise":{"xy":0.05364389545376502,"th":0.2308165604772301},"o_noise":{"range":0.003638487583152994,"bearing":0.008889405361568903}
+
+
+var t_noiser = function(){
+  return {xy: uniform(0., 1.) , th: uniform(0., 1.)}
+}
+var o_noiser = function(){
+  return {range: uniform(0., 1.), bearing: uniform(0., 1.)}
+}
+
+
+var gth = json.read('data/data_1.json')
+
+
+var BEARING_RANGE = 0.7
+
+// var dt = 0.1;
+
+var dt = gth.dt;
+
+var gen_u = function(n)
+{
+  if(n==1)
+    return []
+  return gen_u(n-1).concat([{v: gaussian({mu: 0, sigma: 0.1}) + 0.5, 
+                          w:gaussian({mu: 0, sigma: 0.5})}])
+}
+
+var n = 100
+// var Us = gen_u(n)
+var Us = gth.commands
+
+
+// console.log("before inference")
+
+var transition = function(s, u, dt, t_noise){
+  var x = s.x;
+  var y = s.y;
+  var th = s.th;
+  
+  var v = u.v;
+  var w = u.w;
+  
+  var x_new = x + v * dt * Math.cos(th) + gaussian({mu: 0, sigma: t_noise.xy });
+  var y_new = y + v * dt * Math.sin(th) + gaussian({mu: 0, sigma: t_noise.xy});
+  var th_new = th + w * dt + gaussian({mu: 0, sigma: t_noise.th});  
+  
+  return {x: x_new, y: y_new, th: th_new};
+}
+
+var observe_one = function(s, m, i, o_noise)
+{
+
+  var range = Math.sqrt( Math.pow(s.x-m[i].x, 2) + Math.pow(s.y-m[i].y, 2));
+  
+  var cross = (m[i].x - s.x) * Math.sin(s.th) - (m[i].y - s.y) * Math.cos(s.th);
+
+  var bearing = -Math.sign(cross) * Math.acos( ((m[i].x - s.x) * Math.cos(s.th) + (m[i].y - s.y) * Math.sin(s.th)) / range );
+
+  // console.log(bearing)  
+
+  return  {
+    range: range   + gaussian({mu: 0, sigma: o_noise.range}) , // range noise    
+    bearing: bearing  + gaussian({mu: 0, sigma: o_noise.bearing})  , // bearing noise
+    id: i    
+  };
+}
+              
+var observe_all = function(s, m, n, o_noise)
+{
+  var z = observe_one(s, m, n, o_noise);
+  if(n==0)  
+    if( Math.abs(z.bearing) <= BEARING_RANGE)
+      return [observe_one(s, m, 0, o_noise)];
+    else
+      return [];
+  
+  if( Math.abs(z.bearing) > BEARING_RANGE)
+    return observe_all(s, m, n-1, o_noise);
+  
+  return observe_all(s, m, n-1, o_noise).concat([z]);
+}
+
+var observe_id = function(s, m, i, obs_i, o_noise)
+{
+
+  var range = Math.sqrt( Math.pow(s.x-m[i].x, 2) + Math.pow(s.y-m[i].y, 2));
+  
+  var cross = (m[i].x - s.x) * Math.sin(s.th) - (m[i].y - s.y) * Math.cos(s.th);
+
+  var bearing = -Math.sign(cross) * Math.acos( ((m[i].x - s.x) * Math.cos(s.th) + (m[i].y - s.y) * Math.sin(s.th)) / range );
+
+  // console.log(bearing)  
+
+  return  {
+    range: observe(Gaussian({mu: range, sigma: o_noise.range}), obs_i.range) , // range noise    
+    bearing: observe(Gaussian({mu: bearing, sigma: o_noise.bearing}), obs_i.bearing)  , // bearing noise
+    id: i
+  };
+}
+
+var observe_some = function(s, m, n, obs, o_noise)
+{
+  var i = obs[n].id
+  var z = observe_id(s, m, i, obs[n], o_noise);
+  if(n==0)  
+    return [z];  
+  return observe_some(s, m, n-1, obs, o_noise).concat([z]);
+}
+
+
+
+// var Us = [{v:0.6508658828175573,w:-0.11070896267267151},
+//           {v:0.88032663447426,w:-0.059564075332699216},
+//           {v:1.1366445701034087,w:-0.10268813046373647},
+//           {v:0.8491360899178684,w:0.10131766501372708}]
+
+
+
+var map = function(){
+  return [{x: uniform(-2, 20), y: uniform(-15, 15)},
+          {x: uniform(-2, 20), y: uniform(-15, 15)},
+          {x: uniform(-2, 20), y: uniform(-15, 15)},
+          {x: uniform(-2, 20), y: uniform(-15, 15)},
+          {x: uniform(-2, 20), y: uniform(-15, 15)},
+          {x: uniform(-2, 20), y: uniform(-15, 15)},
+          {x: uniform(-2, 20), y: uniform(-15, 15)},
+          {x: uniform(-2, 20), y: uniform(-15, 15)},
+          {x: uniform(-2, 20), y: uniform(-15, 15)},
+          {x: uniform(-2, 20), y: uniform(-15, 15)}
+         ];
+}
+
+
+// var m = [{x: 0, y: -10},
+//          {x: 4, y: -10},
+//          {x: 8, y: -10},
+//          {x: 12, y: -10},
+//          {x: 16, y: -10},
+//          {x: 0, y: 10},
+//          {x: 4, y: 10},
+//          {x: 8, y: 10},
+//          {x: 12, y: 10},
+//          {x: 16, y: 10}
+//         ];
+
+var max = function(a, b) {
+  if(a>b)
+    return a
+  else
+    return b
+}
+
+var m = gth.map
+
+var eps = 1.
+// var INF = 1000
+var INF = Infinity
+var in_range = function(a, b, r)
+{
+  if(Math.abs(a-b)<=r || true)
+  // if(Math.abs(a-b)<=r)
+    return -(a-b)*(a-b);
+  else
+    return -INF;
+}
+
+var compare_two = function(x, y, r)
+{
+  return in_range(x.range, y.range, r) + in_range(x.bearing, y.bearing, r)
+}
+
+
+var check_one = function(obs, z, i, j)
+{    
+  // console.log(i, j)
+  if (i < 0 && j < 0)
+    return 0;
+
+  if (i < 0 || j < 0)
+    return check_one(obs, z, i-1, j-1) - INF;
+
+
+  if (obs[i].id == z[j].id)
+    return (in_range(obs[i].range, z[j].range, eps) +
+            in_range(obs[i].bearing, z[j].bearing, eps)) +
+            check_one(obs, z, i-1, j-1);
+  
+  if (obs[i].id > z[j].id)
+    return check_one(obs, z, i-1, j) - INF;
+
+  if (obs[i].id < z[j].id)
+    return check_one(obs, z, i, j-1) - INF;
+}
+
+var check = function(obs, z, n)
+{  
+  var checked = check_one(obs[n], z[n], obs[n].length-1, z[n].length-1);
+ 
+  if(n==0)
+    return checked;  
+  
+  return check(obs, z, n-1) + checked;
+}
+
+var check_with_all = function(obs, z, n) {
+  var now = compare_two(obs, z[n], eps)
+  if(n==0)
+    return now
+  var last = check_with_all(obs, z, n-1)
+  return max(now, last)
+}
+
+var check_all = function(obs, z, n, m) {
+  if(n<0) {
+    console.log(n, m)
+    console.log("weird")
+    return
+  }
+  var now = check_with_all(obs[n], z, m)
+  // var now = 0
+  if(n==0)
+    return now
+  else {
+    // console.log(n, m)
+    var last = check_all(obs, z, n-1, m)
+    return now + last
+  }
+}
+
+var observation = function(s, m, obs, o_noise){
+  // repeat(m.length, function() { return {range: Infinity, bearing: Infinity}; });
+  // return observe_all(s, m, m.length-1, o_noise);
+  return observe_some(s, m, obs.length-1, obs, o_noise);
+}
+
+var state = gth.state
+var obs = gth.observations
+
+var BREAKING_POINT = 45
+console.log(BREAKING_POINT)
+
+var process = function(n, m, t_noise, o_noise){
+  
+  if(n==1){
+    var X0 = {
+      x:0,
+      y:0,
+      th:0
+    }
+    return {
+      state: {x: [1], y:[0], th:[0]},
+      observation: [],
+      commands: [],
+      pos: [{x: 0, y:0}]
+    }
+  }
+  var Xs = process(n-1, m, t_noise, o_noise);  
+  
+  //     return {x: [X0.x], y: [X0.y], th: [X0.th]};
+  var X_prev = {
+    x: Xs.state.x[Xs.state.x.length-1],
+    y: Xs.state.y[Xs.state.y.length-1],
+    th: Xs.state.th[Xs.state.th.length-1]
+  }
+  
+//   var u = {v: gaussian({mu: 0, sigma: 0.50}) + 1., 
+//                           w:gaussian({mu: 0, sigma: 0.1})}
+  var u = Us[n-2]
+  
+  var X_new = transition(X_prev, 
+                         u,
+                         dt, 
+                         t_noise);
+
+  globalStore.t = n
+
+  var Z_new = observation(X_new, m, n < BREAKING_POINT ? obs[n-2] : obs[n-10], o_noise);
+
+  // if(Z_new.length>0 && obs[n-2].length>0)
+  // {
+  //   // var score = check_one(Z_new, obs[n-2], Z_new.length-1, obs[n-2].length-1)
+  //   var score = check_all(Z_new, obs[n-2], Z_new.length-1, obs[n-2].length-1)
+  //   factor(score)
+  //   // console.log(score)
+  // }
+
+  return {
+    state: {
+      x: Xs.state.x.concat([X_new.x]),
+      y: Xs.state.y.concat([X_new.y]),
+      th: Xs.state.th.concat([X_new.th])
+    },
+    observation: Xs.observation.concat([Z_new]),
+    commands: Xs.commands.concat([u]),
+    pos: Xs.pos.concat([{x: X_new.x, y:X_new.y}])
+  }
+}
+
+
+
+// var r = process(n, m)
+// var obs = r.observation 
+// var state = r.state
+
+
+
+
+// viz.scatter(r.state.x, r.state.y)
+// print("Ground Truth")
+// viz.scatter(m.concat(r.pos))
+// print(r.observation)
+
+
+
+
+// var t_noise = t_noiser()
+// var o_noise = o_noiser()
+
+
+// viz.scatter(r.state.x, r.state.y, {fileName: 'scatter.svg', xBounds: [0,10]})
+
+
+
+var dist = Infer({method:"SMC", particles: 1000, onlyMAP: false, rejuvSteps: 0},function(){
+// var dist = Infer({method:"MCMC", samples: 10000},function(){
+// var dist = Infer({method:"rejection", samples: 1, incremental: true},function(){
+// var dist = Infer({method: 'incrementalMH', samples: 1000, lag: 1},function(){
+// var dist = Infer({method: 'optimize', samples: 100, steps: 100},function(){
+  // var m = map()
+
+  // var t_noise = t_noiser()
+  // var o_noise = o_noiser()
+
+  
+  var r = process(n, m, t_noise, o_noise);
+  // var score = check(r.observation, obs, obs.length-1)
+  // factor(score)
+//   factor(check(r.observation, obs, obs.length-1) ? 1 : -Infinity );
+  return { state: r.state, map: m, t_noise: t_noise, o_noise: o_noise };
+})
+
+// var r = process(5, m);
+
+// console.log("finished")
+
+// var s = sample(dist)
+
+// print(s)
+var expect = function(dist, n)
+{
+  if(n==0)
+    return {
+      x: [],
+      y: [],
+      th: []
+    }
+  var x = expectation(marginalize(dist, function(s) {
+    return s.state.x[n-1]
+  }))
+  
+  var y = expectation(marginalize(dist, function(s) {
+    return s.state.y[n-1]
+  }))
+  
+  var th = expectation(marginalize(dist, function(s) {
+    return s.state.th[n-1]
+  }))   
+    
+  var exp = expect(dist, n-1)
+  
+  var next = {
+    x: exp.x.concat([x]),
+    y: exp.y.concat([y]),
+    th: exp.th.concat([th]),
+    // pos: exp.pos.concat([{x: x, y: y}])
+  }
+  
+  return next
+}
+
+var exp = expect(dist, n);
+
+// console.log(dist)
+
+var output = {
+  commands: Us,
+  state: state,
+  observations: obs,
+  map: m,
+  infered: exp,
+  count: n
+}
+
+json.write('data/exp.json', output);
+
+
+// console.log("{")
+// console.log("commands: ")
+// console.log(Us)
+// console.log(",")
+// console.log("observations: ")
+// console.log(obs)
+// console.log(",")
+// console.log("map: ")
+// console.log(m)
+// console.log(",")
+// console.log("ground_truth: ")
+// console.log(gth)
+// console.log(",")
+// console.log("infered: ")
+// console.log(exp)
+// console.log(",")
+// console.log("count: ")
+// console.log(n)
+// console.log("}")
+
+
+
+
+
+
+// console.log({
+//   map: m,
+//   // observations: [obs[0]],
+//   // process: r,
+//   ground_truth: gth,
+//   infered: exp,
+//   count: n
+// });
+// console.log("}")
+
+
+// console.log({
+//   map: m,
+//   // observations: [obs[0]],
+//   // process: r,
+//   ground_truth: gth,
+//   infered: exp,
+//   count: n
+// });
+
+// viz.scatter(exp.x, exp.y)
+// print("Estimated Path")
+// viz.scatter(m.concat(exp.pos))
+// 
+// print("Ground-truth")
+// viz.table(r.pos)
+
+// print("Estimated Path")
+// viz.table(exp.pos)
+
+// print("Estimated Path")
+
+
+
+
+// expectation(dist)
+// Object.keys(dist)
+// dist.samples
+
+
+
+
+
+

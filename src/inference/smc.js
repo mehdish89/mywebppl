@@ -18,6 +18,7 @@ module.exports = function(env) {
   var validImportanceOptVals = ['default', 'ignoreGuide', 'autoGuide'];
 
   var sumW = 0;
+  var countW = 0;
 
   function SMC(s, k, a, wpplFn, options) {
     var options = util.mergeDefaults(options, {
@@ -55,6 +56,7 @@ module.exports = function(env) {
     this.particles = [];
     this.completeParticles = [];
     this.particleIndex = 0;
+    this.timestep = 0;
 
     this.step = 0;
 
@@ -127,6 +129,12 @@ module.exports = function(env) {
     particle.trace.score = ad.scalar.add(particle.trace.score, score);
     particle.logWeight += ad.value(score); 
     // console.log("score is " + ad.value(score))
+    if(this.particleIndex == 0){
+      if(this.timestep != s.t)
+        countW = 0;
+      this.timestep = s.t
+    }
+    // console.log(this.allParticles()[0].trace.wpplFn(s,k,a)()+"")    
     sumW += Math.exp(score)
     this.debugLog('(' + this.particleIndex + ') Factor: ' + a);
     return this.sync();
@@ -260,9 +268,13 @@ module.exports = function(env) {
       // var logW = (_.map(this.allParticles(), 'logWeight'));
       // console.log(logW)
 
-      console.log((sumW))
+
+
+      console.log(this.timestep + "\t" + Math.log(sumW) + "\t" + countW)
 
       sumW = 0;
+      countW += 1;
+
 
       this.step += 1;
       this.debugLog('***** sync :: step = ' + this.step + ' *****');
