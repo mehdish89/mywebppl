@@ -60,6 +60,10 @@ var n = 100
 var Us = gth.commands
 
 
+var BREAKING_POINT = 45
+var ROTATION_BREAK_OFFSET = 0.5
+console.log(BREAKING_POINT)
+
 // console.log("before inference")
 
 var transition = function(s, u, dt, t_noise){
@@ -123,7 +127,8 @@ var observe_id = function(s, m, i, obs_i, o_noise)
 
   return  {
     range: observe(Gaussian({mu: range, sigma: o_noise.range}), obs_i.range) , // range noise    
-    bearing: observe(Gaussian({mu: bearing, sigma: o_noise.bearing}), obs_i.bearing)  , // bearing noise
+    bearing: observe(Gaussian({mu: bearing, sigma: o_noise.bearing}), 
+                              obs_i.bearing + (globalStore.t < BREAKING_POINT ? 0. : ROTATION_BREAK_OFFSET))  , // bearing noise
     id: i
   };
 }
@@ -266,8 +271,7 @@ var observation = function(s, m, obs, o_noise){
 var state = gth.state
 var obs = gth.observations
 
-var BREAKING_POINT = 45
-console.log(BREAKING_POINT)
+
 
 var process = function(n, m, t_noise, o_noise){
   
@@ -304,7 +308,8 @@ var process = function(n, m, t_noise, o_noise){
 
   globalStore.t = n
 
-  var Z_new = observation(X_new, m, n < BREAKING_POINT ? obs[n-2] : obs[n-10], o_noise);
+  // var Z_new = observation(X_new, m, n < BREAKING_POINT ? obs[n-2] : obs[n-10], o_noise);
+  var Z_new = observation(X_new, m, obs[n-2], o_noise);
 
   // if(Z_new.length>0 && obs[n-2].length>0)
   // {
