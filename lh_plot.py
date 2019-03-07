@@ -36,7 +36,7 @@ ax.autoscale(enable=True, axis='both', tight=True)
 with open('./data.csv') as f:
 	reader = csv.reader(f, delimiter='\t')
 	# data = [(int(t), float(sumW)) for t, sumW in reader]
-	brk_point = float(reader.next()[0])
+	# brk_point = float(reader.next()[0])
 	data = np.array([line for line in reader if is_number(line[0])], dtype='float32')
 
 	t = data[:, 0]
@@ -61,19 +61,19 @@ for fid in factorId:
 	# print sumW
 
 
-minW = min(filter(lambda x: x != -float('inf'), sumW))
-maxW = max(sumW)
+# minW = min(filter(lambda x: x != -float('inf'), sumW))
+# maxW = max(sumW)
 
-plt.plot([brk_point-0.5, brk_point-0.5], 
-	 [minW, maxW],
-	 color='r',
-	 linewidth=5,
-	 alpha=0.3)
+# plt.plot([brk_point-0.5, brk_point-0.5], 
+# 	 [minW, maxW],
+# 	 color='r',
+# 	 linewidth=5,
+# 	 alpha=0.3)
 
-plt.text(brk_point - 1, minW, 'breaking point \n = ' + str(brk_point) + ' ',
-	 horizontalalignment='right',
-	 color='r',
-	 fontsize=28)
+# plt.text(brk_point - 1, minW, 'breaking point \n = ' + str(brk_point) + ' ',
+# 	 horizontalalignment='right',
+# 	 color='r',
+# 	 fontsize=28)
 
 # plt.scatter(t, sumW)
 
