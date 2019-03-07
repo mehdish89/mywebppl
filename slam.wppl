@@ -61,7 +61,7 @@ var Us = gth.commands
 
 
 var BREAKING_POINT = 45
-var ROTATION_BREAK_OFFSET = 0.5
+var ROTATION_BREAK_OFFSET = -45 * Math.PI / 180
 console.log(BREAKING_POINT)
 
 // console.log("before inference")
