@@ -41,7 +41,7 @@ with open('./data.csv') as f:
 
 	t = data[:, 0]
 	sumW = data[:, 1]
-	factorId = data[:, 2]
+	factorId = data[:, 2].astype('int')
 	print t
 	print sumW
 	print factorId
@@ -50,13 +50,10 @@ cmap = plt.get_cmap('Set1')
 # cmap = plt.get_cmap('Spectral')
 # cmap = plt.get_cmap('gray')
 colors = cmap(np.linspace(0, 1, max(factorId)+1))
-print colors
 
 for fid in factorId:
 	t_i = data[factorId==fid][:, 0]
 	sumW_i = data[factorId==fid][:, 1]
-
-	print colors[fid]
 
 	plt.scatter(t_i, sumW_i, color=colors[fid], alpha=0.5)
 	# plt.plot(t_i, sumW_i)
