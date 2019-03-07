@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 # f = open('./data.txt')
 # ls = f.read().split('\n')[1:-2]
 # data = map(float, ls)
@@ -19,7 +20,7 @@ plt.switch_backend('wxAgg')
 mng = plt.get_current_fig_manager()
 mng.frame.Maximize(True)
 
-plt.subplots_adjust(left=0.04, bottom=0.04, right=0.97, top=0.98, wspace=0, hspace=0)
+plt.subplots_adjust(left=0.04, bottom=0.04, right=0.97, top=0.97, wspace=0, hspace=0)
 
 ax = plt.gca()
 
@@ -29,6 +30,7 @@ for tick in ax.yaxis.get_major_ticks():
         tick.label.set_fontsize(18) 
         tick.label.set_rotation(65)
 
+ax.autoscale(enable=True, axis='both', tight=True)
 	
 
 with open('./data.csv') as f:
@@ -44,10 +46,19 @@ with open('./data.csv') as f:
 	print sumW
 	print factorId
 
+cmap = plt.get_cmap('Set1')
+# cmap = plt.get_cmap('Spectral')
+# cmap = plt.get_cmap('gray')
+colors = cmap(np.linspace(0, 1, max(factorId)+1))
+print colors
+
 for fid in factorId:
 	t_i = data[factorId==fid][:, 0]
 	sumW_i = data[factorId==fid][:, 1]
-	plt.scatter(t_i, sumW_i)
+
+	print colors[fid]
+
+	plt.scatter(t_i, sumW_i, color=colors[fid], alpha=0.5)
 	# plt.plot(t_i, sumW_i)
 	# print t
 	# print sumW
