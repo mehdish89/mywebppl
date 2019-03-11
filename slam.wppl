@@ -22,7 +22,9 @@
 // var t_noise = {xy: 0.1, th: 0.3}
 // var o_noise = {range: 0.1, bearing: 0.05}
 
-var t_noise = {xy: 0.1, th: 0.3}
+// var t_noise = {xy: 0.05, th: 0.1}
+var t_noise = {xy: 0.5, th: 1.0}
+
 var o_noise = {range: 0.1, bearing: 0.05}
 
 
@@ -38,12 +40,12 @@ var o_noiser = function(){
 }
 
 
-var gth = json.read('data/data_1.json')
+var gth = json.read('data/data_0.json')
 
 
 var BEARING_RANGE = 0.7
 
-// var dt = 0.1;
+// var dt = 1.;
 
 var dt = gth.dt;
 
@@ -61,8 +63,18 @@ var Us = gth.commands
 
 
 var BREAKING_POINT = 45
-var ROTATION_BREAK_OFFSET = -45 * Math.PI / 180
+var ROTATION_BREAK_OFFSET = -10 * Math.PI / 180.
+var ROTATION_BREAK_NOISE = 0.1
 console.log(BREAKING_POINT)
+
+var obs = mapIndexed(function(index, zs){ map(function(z){
+  return extend(z, {
+    bearing: z.bearing + (index < BREAKING_POINT ? 
+                                0. : gaussian(ROTATION_BREAK_OFFSET, ROTATION_BREAK_NOISE)),
+  })
+}, zs)}, gth.observations)
+
+// var obs = gth.observations
 
 // console.log("before inference")
 
@@ -74,9 +86,9 @@ var transition = function(s, u, dt, t_noise){
   var v = u.v;
   var w = u.w;
   
-  var x_new = x + v * dt * Math.cos(th) + gaussian({mu: 0, sigma: t_noise.xy });
-  var y_new = y + v * dt * Math.sin(th) + gaussian({mu: 0, sigma: t_noise.xy});
-  var th_new = th + w * dt + gaussian({mu: 0, sigma: t_noise.th});  
+  var x_new = x + v * dt * Math.cos(th) + gaussian({mu: 0, sigma: t_noise.xy * dt });
+  var y_new = y + v * dt * Math.sin(th) + gaussian({mu: 0, sigma: t_noise.xy * dt});
+  var th_new = th + w * dt + gaussian({mu: 0, sigma: t_noise.th * dt});  
   
   return {x: x_new, y: y_new, th: th_new};
 }
@@ -135,7 +147,12 @@ var observe_id = function(s, m, i, obs_i, o_noise)
 
 var observe_some = function(s, m, n, obs, o_noise)
 {
+  if(n<0)
+    return []
+
+
   var i = obs[n].id
+
   var z = observe_id(s, m, i, obs[n], o_noise);
   if(n==0)  
     return [z];  
@@ -269,7 +286,7 @@ var observation = function(s, m, obs, o_noise){
 }
 
 var state = gth.state
-var obs = gth.observations
+
 
 
 

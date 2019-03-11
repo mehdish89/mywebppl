@@ -1,0 +1,195 @@
+// var obs = [[{"range":5.094256427886906,"bearing":1.555631926412632,"id":0},
+//             {"range":2.3746692920403496,"bearing":0.5136801572044718,"id":8},
+//             {"range":3.304426512866045,"bearing":0.38752298432105625,"id":9}],
+//            [{"range":5.013855044391432,"bearing":1.4394905245183853,"id":0},
+//             {"range":1.8040203693978596,"bearing":-0.3652944357308737,"id":5},
+//             {"range":2.537541361159462,"bearing":0.5770053847099317,"id":9}],
+//            [{"range":5.360645155660669,"bearing":1.329312566612322,"id":0},
+//             {"range":2.897446295802523,"bearing":-0.14205653407517935,"id":5},
+//             {"range":1.9303215365214648,"bearing":-0.38031067519961403,"id":6}],
+//            [{"range":5.757745302248238,"bearing":1.1075879687467038,"id":0},
+//             {"range":3.9790932288646332,"bearing":-0.2774129533134114,"id":5},
+//             {"range":3.2260504147311506,"bearing":-0.24233106057699305,"id":6},
+//             {"range":2.2357189289795873,"bearing":-0.5426609257734605,"id":7}]]
+
+/////////////////////////////// 
+//
+// MODEL IS DEFINED BELOW
+//
+///////////////////////////////
+
+
+// var gth = json.read('data/gth.json')
+
+
+var BEARING_RANGE = 1.25
+
+
+var dt = 0.1;
+
+var gen_u = function(n)
+{
+  if(n==1)
+    return []
+  return gen_u(n-1).concat([{v: gaussian({mu: 0, sigma: 0.5 }) + 5.0, 
+                          w:gaussian({mu: 0, sigma: 5.})}])
+}
+
+var n = 100
+var Us = gen_u(n)
+// var Us = gth.commands
+
+var transition = function(s, u, dt){
+  var x = s.x;
+  var y = s.y;
+  var th = s.th;
+  
+  var v = u.v;
+  var w = u.w;
+  
+  var x_new = x + v * Math.cos(th) * dt + gaussian({mu: 0, sigma: 0.5 * dt});
+  var y_new = y + v * Math.sin(th) * dt + gaussian({mu: 0, sigma: 0.5 * dt});
+  var th_new = th + w * dt + gaussian({mu: 0, sigma: 1. * dt});  
+  
+  return {x: x_new, y: y_new, th: th_new};
+}
+
+var observe_one = function(s, m, i)
+{
+
+  if(m[i]==null)
+    return null
+
+  var range = Math.sqrt( Math.pow(s.x-m[i].x, 2) + Math.pow(s.y-m[i].y, 2));
+  
+  var cross = (m[i].x - s.x) * Math.sin(s.th) - (m[i].y - s.y) * Math.cos(s.th);
+
+  var bearing = -Math.sign(cross) * Math.acos( ((m[i].x - s.x) * Math.cos(s.th) + (m[i].y - s.y) * Math.sin(s.th)) / range );
+
+  // console.log(bearing)  
+
+  return  {
+    range: range   + gaussian({mu: 0, sigma: 0.10}) , // range noise    
+    bearing: bearing  + gaussian({mu: 0, sigma: 0.05}) , // bearing noise
+    id: i    
+  };
+}
+              
+var observe_all = function(s, m, n)
+{
+  var z = observe_one(s, m, n);
+  if(n==0)  
+    if(z!=null && Math.abs(z.bearing) <= BEARING_RANGE)
+      return [observe_one(s, m, 0)];
+    else
+      return [];
+  
+  if(z==null || Math.abs(z.bearing) > BEARING_RANGE)
+    return observe_all(s, m, n-1);
+  
+  return observe_all(s, m, n-1).concat([z]);
+}
+
+
+var gtm = [{x: 0, y: -10},
+         {x: 4, y: -10},
+         {x: 8, y: -10},
+         {x: 12, y: -10},
+         {x: 16, y: -10},
+         {x: 0, y: 10},
+         {x: 4, y: 10},
+         {x: 8, y: 10},
+         {x: 12, y: 10},
+         {x: 16, y: 10}
+        ];
+
+var land_mark = function()
+{
+  return {x: uniform(-20, 40), y: uniform(-20, 20)}
+}
+
+var m0 = repeat(30, land_mark)
+
+
+var observation = function(s, m){
+  // repeat(m.length, function() { return {range: Infinity, bearing: Infinity}; });
+  return observe_all(s, m, m.length-1);
+}
+
+// var state = gth.state
+// var obs = gth.observations
+
+var process = function(n, m){
+  
+
+  if(n==1){
+    var X0 = {
+      x:0,
+      y:0,
+      th:0
+    }
+    return {
+      state: {x: [1], y:[0], th:[0]},
+      observation: [],
+      commands: [],
+      pos: [{x: 0, y:0}],
+      map: m0
+    }
+  }
+  var Xs = process(n-1, m0);  
+
+  // var obs_ids = map(function(ob) { return ob.id }, obs[n-2]);
+  // var m = alter_map(Xs.map, obs_ids)
+  
+  //     return {x: [X0.x], y: [X0.y], th: [X0.th]};
+  var X_prev = {
+    x: Xs.state.x[Xs.state.x.length-1],
+    y: Xs.state.y[Xs.state.y.length-1],
+    th: Xs.state.th[Xs.state.th.length-1]
+  }
+
+  
+  
+//   var u = {v: gaussian({mu: 0, sigma: 0.50}) + 1., 
+//                           w:gaussian({mu: 0, sigma: 0.1})}
+  var u = Us[n-2]
+  
+  var X_new = transition(X_prev, 
+                         u,
+                         dt);
+
+
+  var Z_new = observation(X_new, m);
+
+  // var score = check_one(Z_new, obs[n-2], Z_new.length-1, obs[n-2].length-1)
+  // factor(score)
+  
+  return {
+    state: {
+      x: Xs.state.x.concat([X_new.x]),
+      y: Xs.state.y.concat([X_new.y]),
+      th: Xs.state.th.concat([X_new.th])
+    },
+    observation: Xs.observation.concat([Z_new]),
+    commands: Xs.commands.concat([u]),
+    pos: Xs.pos.concat([{x: X_new.x, y:X_new.y}]),
+    map: m
+  }
+}
+
+
+
+var r = process(n, m0)
+var obs = r.observation 
+var state = r.state
+
+var output = {
+  commands: Us,
+  state: state,
+  observations: obs,
+  map: m0,
+  dt: dt,
+  count: n
+}
+
+json.write('data/data_0.json', output);
